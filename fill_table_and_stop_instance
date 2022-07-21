@@ -1,0 +1,86 @@
+import time
+import json
+import boto3
+def lambda_handler(event, context):
+
+    dynamodb = boto3.client('dynamodb')
+    # boto3 client
+    client = boto3.client("ec2")
+    ssm = boto3.client("ssm")
+
+    # getting instance information
+    # describeInstance = client.describe_instances()
+    
+    # #RUNNING INSTANCES WITH TAG SCHEDULE
+    ec2 = boto3.resource('ec2',"us-east-1")
+
+    # filter all running instances
+    instances = ec2.instances.filter(Filters=[{'Name': 'instance-state-name', 'Values': ['running'],'Name': 'tag:Environment', 'Values': ['schedule']}])
+    # Decleared list to store running instances
+    all_running_tag_instances = []
+
+    specific_tag_instance = []
+    for instance in instances:
+        all_running_tag_instances.append(instance.id)
+        
+    print(f'all running instances with tag-Environment:schedule {all_running_tag_instances}')
+
+    # looping through instance ids
+    for instanceid in all_running_tag_instances:
+        # print(instanceid)
+        # command to be executed on instance
+        response = ssm.send_command(
+            InstanceIds=[instanceid],
+            DocumentName="AWS-RunShellScript",
+            Parameters={
+                "commands": ['docker ps --format "{{.Names}}"']
+            },  # replace command_to_be_executed with command
+        )
+        
+       
+        # fetching command id for the output
+        command_id = response["Command"]["CommandId"]
+
+        time.sleep(1.)
+        
+        # fetching command output
+        output = ssm.get_command_invocation(CommandId=command_id, InstanceId=instanceid)
+        final = output["StandardOutputContent"]
+        containers = ([x for x in final.split('\n') if x])
+        print(f'all running containers {containers} with instanceid: {instanceid}')
+        
+        # CONVERT LIST TO STRING
+        def listtostring(containers):
+            strl = " "
+            return (strl.join(containers))
+            
+        container_name= listtostring(containers)
+        if container_name != "":
+            response = dynamodb.put_item(
+                TableName='Instance_schedule',
+                Item={
+                    'InstanceId': {
+                        'S': instanceid
+                    },
+                    'ContainerName': {
+                        'S': container_name
+                    }
+                }
+            )
+        if container_name == "":
+            container_name = "no_container"
+            response = dynamodb.put_item(
+                TableName='Instance_schedule',
+                Item={
+                    'InstanceId': {
+                        'S': instanceid
+                    },
+                    'ContainerName': {
+                        'S': container_name
+                    }
+                }
+            )
+    #     #STOP INSTANCE
+    client.stop_instances(InstanceIds=all_running_tag_instances)
+    print('stopped instances: ' + str(all_running_tag_instances))
+
