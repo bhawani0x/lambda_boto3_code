@@ -1,0 +1,87 @@
+import boto3
+import csv
+import tempfile
+
+def lambda_handler(event, context):
+    # Create a Boto3 client for AWS Lambda
+    lambda_client = boto3.client("lambda")
+
+    # Create a Boto3 client for AWS EC2
+    ec2_client = boto3.client("ec2")
+
+    # Create a Boto3 client for AWS S3
+    s3_client = boto3.client("s3")
+
+    try:
+        # Retrieve a list of all Lambda functions in the AWS account
+        functions = []
+        response = lambda_client.list_functions()
+        functions.extend(response["Functions"])
+
+        while "NextMarker" in response:
+            response = lambda_client.list_functions(Marker=response["NextMarker"])
+            functions.extend(response["Functions"])
+
+        # Create a temporary file to store the CSV data
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
+            # Create a CSV writer
+            csv_writer = csv.writer(temp_file)
+
+            # Write the header row
+            csv_writer.writerow(["Lambda Function", "Subnet IDs", "Availability Zones", "VPC ID", "Security Group IDs"])
+
+            # Iterate through each Lambda function
+            for function in functions:
+                function_name = function["FunctionName"]
+
+                # Retrieve the details of the Lambda function
+                function_details = lambda_client.get_function(FunctionName=function_name)
+
+                # Extract the subnet and VPC IDs from the function details
+                vpc_config = function_details["Configuration"].get("VpcConfig")
+                if vpc_config:
+                    subnet_ids = vpc_config.get("SubnetIds", [])
+                    vpc_id = vpc_config.get("VpcId")
+                    security_group_ids = vpc_config.get("SecurityGroupIds", [])
+                else:
+                    subnet_ids = []
+                    vpc_id = None
+                    security_group_ids = []
+
+                # Retrieve the subnet, VPC, and security group details
+                subnets = ec2_client.describe_subnets(SubnetIds=subnet_ids)["Subnets"] if subnet_ids else []
+                vpcs = ec2_client.describe_vpcs(VpcIds=[vpc_id])["Vpcs"] if vpc_id else []
+                security_groups = ec2_client.describe_security_groups(GroupIds=security_group_ids)["SecurityGroups"] if security_group_ids else []
+
+                # Write the details to the CSV file
+                csv_writer.writerow([
+                    function_name,
+                    ", ".join(subnet_ids),
+                    ", ".join([subnet["AvailabilityZone"] for subnet in subnets]),
+                    vpc_id if vpc_id else "N/A",
+                    ", ".join(security_group_ids) if security_group_ids else "N/A"
+                ])
+
+            # Close the temporary file
+            temp_file.close()
+
+            # Specify the S3 bucket name and file name
+            bucket_name = "YourbucketNAME"
+            file_name = "lambda_details.csv"
+
+            # Upload the CSV file to S3
+            s3_client.upload_file(temp_file.name, bucket_name, file_name)
+
+        # Return the S3 object URL
+        file_url = f"https://{bucket_name}.s3.amazonaws.com/{file_name}"
+        return {
+            "statusCode": 200,
+            "body": file_url
+        }
+
+    except Exception as e:
+        print(f"Error retrieving Lambda function details: {str(e)}")
+        return {
+            "statusCode": 500,
+            "body": "Error retrieving Lambda function details."
+        }
