@@ -1,0 +1,177 @@
+import smtplib, ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
+import boto3
+
+def lambda_handler(event, context):
+
+    aws_client = boto3.client('ssm')
+    
+    response = aws_client.get_parameter(
+        Name='send_email_from_cloudastra',
+        WithDecryption=True
+    )
+    
+
+    class my_dictionary(dict):
+        def __init__(self):
+            self = dict()
+        
+        def add(self, key, value):
+            self[key] = value
+            
+    dict_obj = my_dictionary()
+    
+    env=event["queryStringParameters"]
+    
+    
+    for i in env:
+        if i == 'email':
+            receiver_email = env[i]
+            dict_obj.add("email",env[i])
+        elif i == 'first_name':
+            first_name = env[i]
+            dict_obj.add("first_name", env[i])
+        elif i == 'last_name':
+            last_name = env[i]
+            dict_obj.add('last_name', env[i])
+        elif i == "mobile":
+            dict_obj.add('mobile',env[i])
+        elif i == 'description':
+            dict_obj.add('description',env[i])
+        elif i == "budget":
+            dict_obj.add('budget',env[i])
+    
+    full_name = first_name + " "+ last_name
+    
+    sender_email = "hr@cloudastra.in"
+    cc = ["aditi@cloudastra.in","hr@cloudastra.in"]
+    
+    password = response['Parameter']['Value']
+    
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "Welcome to cloudastra"
+    message["From"] = sender_email
+    message["To"] = receiver_email
+    message["Cc"] = ','.join(cc)
+    
+    html = """
+    <!doctype html>
+    <html lang="en-US">
+    
+    <head>
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type" />
+        <title>New Account Email Template</title>
+        <meta name="description" content="New Account Email Template.">
+        <style type="text/css">
+            a:hover {
+                text-decoration: underline !important;
+            }
+        </style>
+    </head>
+    
+    <body marginheight="0" topmargin="0" marginwidth="0" style="margin: 0px; background-color: #F2F3F8;" leftmargin="0">
+        <!-- 100% body table -->
+        <table cellspacing="0" border="0" cellpadding="0" width="100%" bgcolor="#F2F3F8"
+            style="@import url(https://fonts.googleapis.com/css?family=Rubik:300,400,500,700%7COpen+Sans:300,400,600,700); font-family: 'Open Sans', sans-serif;">
+            <tr>
+                <td>
+                    <table style="background-color: #F2F3F8; max-width:670px; margin:0 auto;" width="100%" border="0"
+                        align="center" cellpadding="0" cellspacing="0">
+                        <tr>
+                            <td style="height:80px;">&nbsp;</td>
+                        </tr>
+    
+                        <tr>
+                            <td style="height:20px;">&nbsp;</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <table width="95%" border="0" align="center" cellpadding="0" cellspacing="0"
+                                    style="max-width:670px; background:#fff; border-radius:3px; text-align:center;-webkit-box-shadow:0 6px 18px 0 rgba(0,0,0,.06);-moz-box-shadow:0 6px 18px 0 rgba(0,0,0,.06);box-shadow:0 6px 18px 0 rgba(0,0,0,.06);">
+                                    <tr>
+                                        <td style="height:40px;">&nbsp;</td>
+                                    </tr>
+                                    <!-- <tr>
+                                        <td style="text-align:center;">
+                                            <a href="https://cloudastra.co" title="logo" target="_blank">
+                                                <img width="60"
+                                                    src="https://www.cloudastra.co/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FCompany-logo%20(2).1b16c29c.png&w=256&q=75"
+                                                    title="logo" alt="logo">
+                                            </a>
+                                        </td>
+                                    </tr> -->
+                                    <tr>
+                                        <td style="padding:0 35px;">
+                                            <p
+                                                style="color:#1e1e2d;;text-align: start ; margin:0;font-size:20px;font-family:'Rubik',sans-serif;">
+                                                Hii """+first_name+ """
+                                            </p>
+                                            <br>
+                                            <p style="text-align: start;">Thank you for visiting our website and filling out
+                                                our contact form. We
+                                                appreciate
+                                                your interest in our services.</p>
+                                            <p style="text-align: start;">
+                                                We want to assure you that we have received your message and we will get
+                                                back to
+                                                you within the next 20 hours. Our team will review your inquiry thoroughly
+                                                and
+                                                provide you with the information you need as soon as possible.
+                                            </p>
+                                            <br>
+                                            <p style="text-align: start;">Best regards,</p>
+                                            <p style="text-align: start;">Team CloudAstra Technologies</p>
+                                            <br>
+                                            <p style="text-align: start; color: #1264a3;"><a
+                                                    href="https://www.cloudastra.co/">www.cloudastra.co</a></p>
+                                            <p style="text-align: start;">DISCOVER | BUILD | GROW</p>
+                                            <p style="text-align: start;">Address- C-277, C Block, Sector 63,</p>
+                                            <p style="text-align: start;">Noida, Uttar Pradesh 201301</p>
+                                            <div style="display: flex; justify-content: flex-start;"><img alt="cloudastra" height="120" width="120" src="https://cloudastra-logo.s3.amazonaws.com/png+512.png" /></div>
+    
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="height:40px;">&nbsp;</td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="height:20px;">&nbsp;</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align:center;">
+                                <p
+                                    style="font-size:14px; color:rgba(69, 80, 86, 0.7411764705882353); line-height:18px; margin:0 0 0;">
+                                    &copy; <strong>www.cloudastra.co</strong> </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="height:80px;">&nbsp;</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+        <!--/100% body table-->
+    </body>
+    
+    </html>
+    """
+    
+    
+    part2 = MIMEText(html, "html")
+    
+    message.attach(part2)
+    
+    receiver_email = [receiver_email] + cc
+    
+    context = ssl.create_default_context()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+        server.login(sender_email, password)
+        server.sendmail(
+            sender_email, receiver_email, message.as_string()
+        )
